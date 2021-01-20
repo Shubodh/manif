@@ -128,7 +128,9 @@ int main()
     Matrix3d    P;
 
     X_simulation.setIdentity();
+    cout << "X set to identity is: " << X << endl;
     X.setIdentity();
+    cout << "X set to identity is: " << X << endl;
     X_unfiltered.setIdentity();
     P.setZero();
 

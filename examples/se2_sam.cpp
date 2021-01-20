@@ -205,8 +205,8 @@ using namespace Eigen;
 using manif::SE2d;
 using manif::SE2Tangentd;
 
-static constexpr int DoF = SE2d::DoF;
-static constexpr int Dim = SE2d::Dim;
+static constexpr int DoF = SE2d::DoF; // 3 degrees of freedom
+static constexpr int Dim = SE2d::Dim; // 2D world
 
 // Define many data types (Tangent refers to the tangent of SE2)
 typedef Array<double,  DoF, 1>      ArrayT;     // tangent-size array
@@ -365,7 +365,7 @@ int main()
             // add noise and compute prior lmk from prior pose
             measurements[i][k]  = y + y_noise;           // store noisy measurements
             b                   = Xi.act(y + y_noise);   // mapped landmark with noise
-            landmarks[k]        = b + VectorB::Random(); // use very noisy priors
+            landmarks[k]        = b + VectorB::Random(); // use very noisy priors //COMMENTS: Doesn't make complete sense, landmarks[k] get replaced again and again with respect to observation in last pose, which doesnt make complete sense. I mean, yes we did have a discussion about how to initialize landmarks and ended up with no specific answer, perhaps the same case here as well.
         }
 
         // make motions

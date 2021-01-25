@@ -50,7 +50,7 @@ typedef Matrix<double, Dim, Dim> MatrixYB;  // measurement x landmark size matri
 static const int NUM_POSES = 120;
 static const int NUM_STATES = NUM_POSES * DoF;
 static const int NUM_MEAS = 420;
-static const int MAX_ITER = 20;  // for the solver
+static const int MAX_ITER = 40;  // for the solver
 
 struct edge {
     int ind1, ind2;
@@ -120,8 +120,10 @@ int main() {
     ArrayT u_sigmas;  // control noise std specification
     MatrixT W;        // sqrt Info
 
+    ///// info matrix and anchor ????????????????????????
     u_sigmas << 0.01, 0.01, 0.01;
     W = u_sigmas.inverse().matrix().asDiagonal();  // this is Q^(-T/2)
+    cout << W << endl;
 
     // Declare some temporaries
     SE2Tangentd d;           // motion expectation d = Xj (-) Xi = Xj.minus ( Xi )
@@ -176,11 +178,6 @@ int main() {
             Xi = poses[i];
             Xj = poses[j];
             u = edg.u;
-
-            //???????????????????????????????????????????????????????
-            if (i >= NUM_POSES || j >= NUM_POSES) {
-                continue;
-            }
 
             // expectation (use right-minus since motion measurements are local)
             d = Xj.rminus(Xi, J_d_xj, J_d_xi);  // expected motion = Xj (-) Xi

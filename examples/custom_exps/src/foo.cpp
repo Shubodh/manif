@@ -20,6 +20,7 @@ using std::endl;
 using std::ifstream;
 using std::list;
 using std::map;
+using std::ofstream;
 using std::pair;
 using std::string;
 using std::vector;
@@ -46,9 +47,9 @@ typedef Matrix<double, Dim, DoF> MatrixYT;  // measurement x tangent size matrix
 typedef Matrix<double, Dim, Dim> MatrixYB;  // measurement x landmark size matrix
 
 // some experiment constants
-static const int NUM_POSES = 40;
+static const int NUM_POSES = 120;
 static const int NUM_STATES = NUM_POSES * DoF;
-static const int NUM_MEAS = NUM_POSES * DoF;
+static const int NUM_MEAS = 420;
 static const int MAX_ITER = 20;  // for the solver
 
 struct edge {
@@ -101,7 +102,7 @@ void initial_pose(vector<SE2d>& poses, vector<struct edge>& controls) {
 int main() {
     // DEBUG INFO
     cout << endl;
-    cout << "2D Smoothing and Mapping. 3 poses, 5 landmarks." << endl;
+    cout << "2D Smoothing and Mapping." << endl;
     cout << "-----------------------------------------------" << endl;
     cout << std::fixed << std::setprecision(3) << std::showpos;
 
@@ -227,9 +228,13 @@ int main() {
 
     // solved problem
     // cout << "posterior" << std::showpos << endl;
-    // for (const auto& X : poses)
-    //     cout << "pose  : " << X.translation().transpose() << " " << X.angle() << endl;
-    // cout << "-----------------------------------------------" << endl;
+    // writing final poses to output file
+    int ind = 0;
+    ofstream fout("src/opt.txt");
+    for (const auto& X : poses) {
+        fout << "VERTEX_SE2 " << ind << " " << X.translation().transpose() << " " << X.angle() << endl;
+        ind++;
+    }
 
     // ground truth
     // cout << "ground truth1" << std::showpos << endl;

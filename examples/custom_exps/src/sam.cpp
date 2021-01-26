@@ -39,7 +39,7 @@ typedef Array<double, DoF, 1> ArrayT;      // tangent-size array
 typedef Matrix<double, DoF, DoF> MatrixT;  // tangent-size square matrix
 typedef Matrix<double, Dynamic, Dynamic> Matrixd;
 
-static const int MAX_ITER = 20;  // for the solver
+static const int MAX_ITER = 20;
 static const string input_edges_file = "src/edges.txt";
 static const string output_init_file = "src/init.txt";
 static const string output_opt_file = "src/opt.txt";

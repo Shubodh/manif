@@ -47,7 +47,6 @@ static const string output_opt_file = "src/opt.txt";
 // Information matrix
 static const double WEIGHT_ODOMETRY = 100;
 static const double WEIGHT_LOOP_CLOSURE = 100;
-static const double WEIGHT_ANCHOR = 100;
 
 struct edge {
     int ind1, ind2;
@@ -127,8 +126,7 @@ int main() {
     int NUM_MEAS = (controls.size() + 1) * DoF;  // + 1 for anchor
 
     // information matrix
-    ArrayT anchor_info, odom_info, loop_info;
-    anchor_info << WEIGHT_ANCHOR, WEIGHT_ANCHOR, WEIGHT_ANCHOR;
+    ArrayT odom_info, loop_info;
     odom_info << WEIGHT_ODOMETRY, WEIGHT_ODOMETRY, WEIGHT_ODOMETRY;
     loop_info << WEIGHT_LOOP_CLOSURE, WEIGHT_LOOP_CLOSURE, WEIGHT_LOOP_CLOSURE;
     MatrixT W;
@@ -166,10 +164,7 @@ int main() {
         //   We have residual = expectation - measurement, in global tangent space
         //   We have the Jacobian in J_r_p0 = J.block<DoF, DoF>(row, col);
         // We compute the whole in a one-liner:
-        // W = anchor_info.matrix().asDiagonal();
         r.segment<DoF>(row) = poses[0].lminus(anchor, J.block<DoF, DoF>(row, col)).coeffs();
-        // cout << r.segment<DoF>(row) << endl;
-        // cout << J.block<DoF, DoF>(row, col) << endl;
 
         // advance rows
         row += DoF;

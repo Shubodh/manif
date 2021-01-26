@@ -41,8 +41,8 @@ typedef Matrix<double, Dynamic, Dynamic> Matrixd;
 
 static const int MAX_ITER = 30;
 
-static const string input_edges_file = "src/input/input_simulated.g2o";
-static const string output_opt_file = "src/output/opt_simulated.g2o";
+static const string input_edges_file = "src/input/input_intel.g2o";
+static const string output_opt_file = "src/output/opt_intel.g2o";
 
 // Information matrix
 static const double WEIGHT_ODOMETRY = 100;
@@ -191,7 +191,13 @@ int main() {
         // compute optimal step
         // ATTENTION: This is an expensive step!!
         // ATTENTION: Use QR factorization and column reordering for larger problems!!
-        dX = -(J.transpose() * J).inverse() * J.transpose() * r;
+        // dX = -(J.transpose() * J).inverse() * J.transpose() * r;
+        auto H = J.transpose() * J;
+        auto b = -J.transpose() * r;
+        cout << "1" << endl;
+        cout << H.size() << endl;
+        dX = H.llt().solve(b);
+        cout << "2" << endl;
 
         // update all poses
         for (int i = 0; i < NUM_POSES; ++i) {

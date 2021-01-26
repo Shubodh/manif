@@ -20,6 +20,7 @@ using std::endl;
 using std::ifstream;
 using std::list;
 using std::map;
+using std::ofstream;
 using std::pair;
 using std::string;
 using std::vector;
@@ -31,31 +32,31 @@ using namespace Eigen;
 using manif::SE2d;
 using manif::SE2Tangentd;
 
-// static constexpr int DoF = SE2d::DoF;  // 3 degrees of freedom
-// static constexpr int Dim = SE2d::Dim;  // 2D world
+static constexpr int DoF = SE2d::DoF;  // 3 degrees of freedom
 
 // Define many data types (Tangent refers to the tangent of SE2)
-typedef Array<double, Dynamic, Dynamic> ArrayT;  // tangent-size array
-// typedef Matrix<double, DoF, 1> VectorT;    // tangent-size vector
-typedef Matrix<double, Dynamic, Dynamic> MatrixT;  // tangent-size square matrix
-// typedef Matrix<double, Dim, 1> VectorB;     // landmark-size vector
-// typedef Array<double, Dim, 1> ArrayY;       // measurement-size array
-// typedef Matrix<double, Dim, 1> VectorY;     // measurement-size vector
-// typedef Matrix<double, Dim, Dim> MatrixY;   // measurement-size square matrix
-// typedef Matrix<double, Dim, DoF> MatrixYT;  // measurement x tangent size matrix
-// typedef Matrix<double, Dim, Dim> MatrixYB;  // measurement x landmark size matrix
-typedef Matrix<double, Dynamic, Dynamic> MatrixXd;
+typedef Array<double, DoF, 1> ArrayT;      // tangent-size array
+typedef Matrix<double, DoF, DoF> MatrixT;  // tangent-size square matrix
+typedef Matrix<double, Dynamic, Dynamic> Matrixd;
 
-static const int MAX_ITER = 10;  // for the solver
+static const int MAX_ITER = 20;  // for the solver
+static const string input_edges_file = "src/edges.txt";
+static const string output_init_file = "src/init.txt";
+static const string output_opt_file = "src/opt.txt";
+
+// Information matrix
+static const double WEIGHT_ODOMETRY = 100;
+static const double WEIGHT_LOOP_CLOSURE = 100;
+static const double WEIGHT_ANCHOR = 100;
 
 struct edge {
     int ind1, ind2;
     SE2Tangentd u;
 };
 
-vector<struct edge> read_input(string input_file, vector<SE2d>& poses) {
+vector<struct edge> read_input(vector<SE2d>& poses) {
     //read edges from file
-    ifstream fin(input_file);
+    ifstream fin(input_edges_file);
 
     string line, token, delimiter = " ";
     vector<struct edge> controls;  // robot controls
@@ -63,6 +64,7 @@ vector<struct edge> read_input(string input_file, vector<SE2d>& poses) {
     while (getline(fin, line)) {
         vector<string> tokens;
         int pos = 0;
+        // tokenize string by spaces
         while ((pos = line.find(delimiter)) != string::npos) {
             token = line.substr(0, pos);
             tokens.push_back(token);
@@ -93,67 +95,63 @@ void initial_pose(vector<SE2d>& poses, vector<struct edge>& controls) {
             poses.push_back(X_j);
         }
     }
+
+    // write initial poses to a file for plots
+    int ind = 0;
+    ofstream fout(output_init_file);
+    for (const auto& X : poses) {
+        fout << "VERTEX_SE2 " << ind++ << " " << X.translation().transpose() << " " << X.angle() << endl;
+    }
 }
 
 int main() {
-    int DoF = 3;
     // DEBUG INFO
-    cout << endl;
-    cout << "2D Smoothing and Mapping" << endl;
+    cout << "-----------------------------------------------" << endl;
+    cout << "2D Smoothing and Mapping." << endl;
     cout << "-----------------------------------------------" << endl;
     cout << std::fixed << std::setprecision(3) << std::showpos;
 
     // START CONFIGURATION
+    vector<SE2d> poses;            // robots poses
+    vector<struct edge> controls;  // robots controls
 
-    vector<SE2d> poses;
-    vector<struct edge> controls;
+    // reading input edges and pose
+    controls = read_input(poses);
 
-    // taking edges input
-    controls = read_input("src/edges.txt", poses);
     // initial pose guess
     initial_pose(poses, controls);
 
-    // Define a control vector and its noise and covariance in the tangent of SE2
-    ArrayT u_sigmas(DoF, 1);  // control noise std specification
-    MatrixT W(DoF, DoF);      // sqrt Info
+    // variables
+    int NUM_POSES = poses.size();
+    int NUM_STATES = NUM_POSES * DoF;
+    int NUM_MEAS = (controls.size() + 1) * DoF;  // + 1 for anchor
 
-    u_sigmas << 0.01, 0.01, 0.01;
-    W = u_sigmas.inverse().matrix().asDiagonal();  // this is Q^(-T/2)
+    // information matrix
+    ArrayT anchor_info, odom_info, loop_info;
+    anchor_info << WEIGHT_ANCHOR, WEIGHT_ANCHOR, WEIGHT_ANCHOR;
+    odom_info << WEIGHT_ODOMETRY, WEIGHT_ODOMETRY, WEIGHT_ODOMETRY;
+    loop_info << WEIGHT_LOOP_CLOSURE, WEIGHT_LOOP_CLOSURE, WEIGHT_LOOP_CLOSURE;
+    MatrixT W;
 
     // Declare some temporaries
-    SE2Tangentd d;                               // motion expectation d = Xj (-) Xi = Xj.minus ( Xi )
-    MatrixT J_d_xi(DoF, DoF), J_d_xj(DoF, DoF);  // Jacobian of motion wrt poses i and j
-
-    SE2Tangentd dx;  // optimal pose correction step
+    SE2Tangentd d;           // motion expectation d = Xj (-) Xi = Xj.minus ( Xi )
+    SE2Tangentd dx;          // optimal pose correction step
+    MatrixT J_d_xi, J_d_xj;  // Jacobian of motion wrt poses i and j
 
     // Problem-size variables
-    // about this +1 ??????????????????????????///
-    int NUM_POSES = poses.size() + 1;
-    int NUM_STATES = NUM_POSES * DoF;
-    int NUM_MEAS = (controls.size() + 1) * DoF;
-
-    VectorXd dX(NUM_STATES, 1);
-    MatrixXd J(NUM_MEAS, NUM_STATES);
-    VectorXd r(NUM_MEAS, 1);
-    // Matrix<double, NUM_STATES, 1> dX;        // optimal update step for all the SAM problem
-    // Matrix<double, NUM_MEAS, NUM_STATES> J;  // full Jacobian
-    // Matrix<double, 360, 1> r;  // full residual
+    VectorXd dX(NUM_STATES, 1);       // optimal update step for all the SAM problem
+    Matrixd J(NUM_MEAS, NUM_STATES);  // full Jacobian
+    VectorXd r(NUM_MEAS, 1);          // full residual
 
     // END CONFIGURATION
-
-    // Estimator #################################################################
-
-    // DEBUG INFO
-    // cout << "prior" << std::showpos << endl;
-    // for (const auto& X : poses)
-    //     cout << "pose  : " << X.translation().transpose() << " " << X.angle() << endl;
-    // cout << "-----------------------------------------------" << endl;
 
     // iterate
     SE2d Xi, Xj;
     SE2Tangentd u;
+    SE2d anchor = poses[0];
 
     cout << "ITERATIONS" << std::noshowpos << endl;
+    cout << "-----------------------------------------------" << endl;
 
     for (int iteration = 0; iteration < MAX_ITER; ++iteration) {
         // Clear residual vector and Jacobian matrix
@@ -168,45 +166,48 @@ int main() {
         //   We have residual = expectation - measurement, in global tangent space
         //   We have the Jacobian in J_r_p0 = J.block<DoF, DoF>(row, col);
         // We compute the whole in a one-liner:
-        // cout << row << " " << col << endl;
-        r.segment(row, DoF) = poses[0].lminus(SE2d::Identity(), J.block(row, col, DoF, DoF)).coeffs();
+        // W = anchor_info.matrix().asDiagonal();
+        r.segment<DoF>(row) = poses[0].lminus(anchor, J.block<DoF, DoF>(row, col)).coeffs();
+        // cout << r.segment<DoF>(row) << endl;
+        // cout << J.block<DoF, DoF>(row, col) << endl;
+
         // advance rows
         row += DoF;
 
         // loop poses
         for (auto edg : controls) {
-            // 2. evaluate motion factors -----------------------
+            // evaluate motion factors
             int i = edg.ind1, j = edg.ind2;
+
+            // info matrix according to type of edge
+            if (abs(i - j) == 1) {
+                W = odom_info.matrix().asDiagonal();
+            } else {
+                W = loop_info.matrix().asDiagonal();
+            }
 
             // recover related states and data
             Xi = poses[i];
             Xj = poses[j];
             u = edg.u;
 
-            //???????????????????????????????????????????????????????
-            // if (i >= NUM_POSES || j >= NUM_POSES) {
-            //     continue;
-            // }
-
             // expectation (use right-minus since motion measurements are local)
             d = Xj.rminus(Xi, J_d_xj, J_d_xi);  // expected motion = Xj (-) Xi
 
             // residual
-            r.segment(row, DoF) = W * (d - u).coeffs();  // residual
+            r.segment<DoF>(row) = W * (d - u).coeffs();  // residual
 
             // Jacobian of residual wrt first pose
             col = i * DoF;
-            J.block(row, col, DoF, DoF) = W * J_d_xi;
+            J.block<DoF, DoF>(row, col) = W * J_d_xi;
 
             // Jacobian of residual wrt second pose
             col = j * DoF;
-            J.block(row, col, DoF, DoF) = W * J_d_xj;
+            J.block<DoF, DoF>(row, col) = W * J_d_xj;
 
             // advance rows
             row += DoF;
         }
-
-        // 4. Solve -----------------------------------------------------------------
 
         // compute optimal step
         // ATTENTION: This is an expensive step!!
@@ -215,10 +216,9 @@ int main() {
 
         // update all poses
         for (int i = 0; i < NUM_POSES; ++i) {
-            // we go very verbose here
             int row = i * DoF;
-            int size = DoF;
-            dx = dX.segment(row, size);
+            constexpr int size = DoF;
+            dx = dX.segment<size>(row);
             poses[i] = poses[i] + dx;
         }
 
@@ -228,21 +228,16 @@ int main() {
         // conditional exit
         if (dX.norm() < 1e-6) break;
     }
-    // cout << "-----------------------------------------------" << endl;
+    cout << "-----------------------------------------------" << endl;
 
-    // cout << std::fixed;
+    cout << std::fixed;
 
-    // solved problem
-    // cout << "posterior" << std::showpos << endl;
-    // for (const auto& X : poses)
-    //     cout << "pose  : " << X.translation().transpose() << " " << X.angle() << endl;
-    // cout << "-----------------------------------------------" << endl;
-
-    // ground truth
-    // cout << "ground truth1" << std::showpos << endl;
-    // for (const auto& X : poses_simu)
-    //     cout << "pose  : " << X.translation().transpose() << " " << X.angle() << endl;
-    // cout << "-----------------------------------------------" << endl;
+    // writing final optimised poses to file
+    int ind = 0;
+    ofstream fout(output_opt_file);
+    for (const auto& X : poses) {
+        fout << "VERTEX_SE2 " << ind++ << " " << X.translation().transpose() << " " << X.angle() << endl;
+    }
 
     return 0;
 }

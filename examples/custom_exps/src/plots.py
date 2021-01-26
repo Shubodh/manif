@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -54,9 +55,16 @@ def read_vertex(fileName):
 
 
 if __name__ == "__main__":
-    gt_file_path = "gt.txt"
-    init_file_path = "init.txt"
-    opt_file_path = "opt.txt"
+    parser = argparse.ArgumentParser(description='Visualization')
+    parser.add_argument('-gt', required=True, help='Ground Truth poses')
+    parser.add_argument('-init', required=True, help='Initial guess poses')
+    parser.add_argument('-opt', required=True, help='Optimised poses')
+
+    args = parser.parse_args()
+
+    gt_file_path = args.gt
+    init_file_path = args.init
+    opt_file_path = args.opt
     poses_gt = read_vertex(gt_file_path).T
     poses_init = read_vertex(init_file_path).T
     poses_opt = read_vertex(opt_file_path).T

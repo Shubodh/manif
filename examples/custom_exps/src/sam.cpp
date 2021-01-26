@@ -39,10 +39,10 @@ typedef Array<double, DoF, 1> ArrayT;      // tangent-size array
 typedef Matrix<double, DoF, DoF> MatrixT;  // tangent-size square matrix
 typedef Matrix<double, Dynamic, Dynamic> Matrixd;
 
-static const int MAX_ITER = 20;
-static const string input_edges_file = "src/edges.txt";
-static const string output_init_file = "src/init.txt";
-static const string output_opt_file = "src/opt.txt";
+static const int MAX_ITER = 30;
+
+static const string input_edges_file = "src/input/input_simulated.g2o";
+static const string output_opt_file = "src/output/opt_simulated.g2o";
 
 // Information matrix
 static const double WEIGHT_ODOMETRY = 100;
@@ -74,33 +74,16 @@ vector<struct edge> read_input(vector<SE2d>& poses) {
         if (tokens[0] == "EDGE_SE2") {
             struct edge edg;
             edg.ind1 = atoi(tokens[1].c_str()), edg.ind2 = atoi(tokens[2].c_str());
-            float a = atof(tokens[3].c_str()), b = atof(tokens[4].c_str()), c = atof(tokens[5].c_str());
+            double a = atof(tokens[3].c_str()), b = atof(tokens[4].c_str()), c = atof(tokens[5].c_str());
             edg.u << a, b, c;
             controls.push_back(edg);
         }
         if (tokens[0] == "VERTEX_SE2") {
-            int a = atoi(tokens[2].c_str()), b = atoi(tokens[3].c_str()), c = atoi(tokens[4].c_str());
+            double a = atof(tokens[2].c_str()), b = atof(tokens[3].c_str()), c = atof(tokens[4].c_str());
             poses.emplace_back(a, b, c);
         }
     }
     return controls;
-}
-
-void initial_pose(vector<SE2d>& poses, vector<struct edge>& controls) {
-    // create initial pose guess from given edges
-    for (auto edg : controls) {
-        if (edg.ind2 - edg.ind1 == 1) {
-            SE2d X_j = poses[edg.ind1] + edg.u;
-            poses.push_back(X_j);
-        }
-    }
-
-    // write initial poses to a file for plots
-    int ind = 0;
-    ofstream fout(output_init_file);
-    for (const auto& X : poses) {
-        fout << "VERTEX_SE2 " << ind++ << " " << X.translation().transpose() << " " << X.angle() << endl;
-    }
 }
 
 int main() {
@@ -108,7 +91,7 @@ int main() {
     cout << "-----------------------------------------------" << endl;
     cout << "2D Smoothing and Mapping." << endl;
     cout << "-----------------------------------------------" << endl;
-    cout << std::fixed << std::setprecision(3) << std::showpos;
+    cout << std::fixed << std::setprecision(5) << std::showpos;
 
     // START CONFIGURATION
     vector<SE2d> poses;            // robots poses
@@ -117,8 +100,9 @@ int main() {
     // reading input edges and pose
     controls = read_input(poses);
 
-    // initial pose guess
-    initial_pose(poses, controls);
+    cout << "Number of poses " << poses.size() << endl;
+    cout << "Number of edges " << controls.size() << endl;
+    cout << "-----------------------------------------------" << endl;
 
     // variables
     int NUM_POSES = poses.size();

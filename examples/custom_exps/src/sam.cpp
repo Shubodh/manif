@@ -41,8 +41,9 @@ typedef Matrix<double, Dynamic, Dynamic> Matrixd;
 
 static const int MAX_ITER = 30;
 
-static const string input_edges_file = "src/input/input_intel.g2o";
-static const string output_opt_file = "src/output/opt_intel.g2o";
+//static const string input_edges_file = "../src/input/input_intel.g2o";
+//static const string output_opt_file = "../src/output/opt_intel.g2o";
+
 
 // Information matrix
 static const double WEIGHT_ODOMETRY = 100;
@@ -53,7 +54,7 @@ struct edge {
     SE2Tangentd u;
 };
 
-vector<struct edge> read_input(vector<SE2d>& poses) {
+vector<struct edge> read_input(vector<SE2d>& poses, const string& input_edges_file) {
     //read edges from file
     ifstream fin(input_edges_file);
 
@@ -86,7 +87,18 @@ vector<struct edge> read_input(vector<SE2d>& poses) {
     return controls;
 }
 
-int main() {
+//HOWTO: ./sam inputFile outputFile
+int main(const int argc, const char *argv[]) {
+//    //Default arguments
+    string input_edges_file = "../src/input/input_simulated.g2o";
+    string output_opt_file = "../src/output/opt_simulated.g2o";
+
+    //Input args
+    if (argc > 1){
+        input_edges_file = argv[1];
+        output_opt_file = argv[2];
+    }
+
     // DEBUG INFO
     cout << "-----------------------------------------------" << endl;
     cout << "2D Smoothing and Mapping." << endl;
@@ -98,7 +110,7 @@ int main() {
     vector<struct edge> controls;  // robots controls
 
     // reading input edges and pose
-    controls = read_input(poses);
+    controls = read_input(poses, input_edges_file);
 
     cout << "Number of poses " << poses.size() << endl;
     cout << "Number of edges " << controls.size() << endl;
@@ -136,6 +148,7 @@ int main() {
     cout << "-----------------------------------------------" << endl;
 
     for (int iteration = 0; iteration < MAX_ITER; ++iteration) {
+        cout << "iteration number: " << iteration << endl;
         // Clear residual vector and Jacobian matrix
         r.setZero();
         J.setZero();
@@ -194,10 +207,10 @@ int main() {
         // dX = -(J.transpose() * J).inverse() * J.transpose() * r;
         auto H = J.transpose() * J;
         auto b = -J.transpose() * r;
-        cout << "1" << endl;
+        cout << "1 DEBUG" << endl;
         cout << H.size() << endl;
         dX = H.llt().solve(b);
-        cout << "2" << endl;
+        cout << "2 DEBUG" << endl;
 
         // update all poses
         for (int i = 0; i < NUM_POSES; ++i) {
